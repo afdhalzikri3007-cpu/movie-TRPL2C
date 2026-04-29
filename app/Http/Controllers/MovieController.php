@@ -2,105 +2,67 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Movie;
-use App\Models\Category;
-use Illuminate\Support\Str;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\File;
-// ✅ Hapus: use Illuminate\Validation\Rule;
-// ✅ Hapus: use Illuminate\Support\Facades\Validator;
-// ✅ Tambah dua baris ini:
+use App\Services\MovieService;
+use App\Models\Category;
 use App\Http\Requests\StoreMovieRequest;
 use App\Http\Requests\UpdateMovieRequest;
 
 class MovieController extends Controller
 {
-    public function index()
+    protected MovieService $movieService;
+
+    public function __construct(MovieService $movieService)
     {
-        $query = Movie::latest();
-        if (request('search')) {
-            $query->where('judul', 'like', '%' . request('search') . '%')
-                ->orWhere('sinopsis', 'like', '%' . request('search') . '%');
-        }
-        $movies = $query->paginate(6)->withQueryString();
-        return view('homepage', compact('movies'));
+        $this->movieService = $movieService;
     }
 
-    public function detail($id)
+    public function index()
     {
-        $movie = Movie::find($id);
-        return view('detail', compact('movie'));
+        $movies = $this->movieService->getMoviesForHomepage();
+        return view('movies.homepage', compact('movies'));
+    }
+
+    public function detail(string $id)
+    {
+        $movie = $this->movieService->findMovie($id);
+        return view('movies.detail', compact('movie'));
     }
 
     public function create()
     {
         $categories = Category::all();
-        return view('input', compact('categories'));
+        return view('movies.input', compact('categories'));
     }
 
-    // ✅ SETELAH: Ganti Request dengan StoreMovieRequest
     public function store(StoreMovieRequest $request)
     {
-        $validated = $request->validated();
-
-        if ($request->hasFile('foto_sampul')) {
-            $file = $request->file('foto_sampul');
-            $fileName = Str::uuid()->toString() . '.' . $file->getClientOriginalExtension();
-            $file->move(public_path('images'), $fileName);
-            $validated['foto_sampul'] = $fileName;
-        }
-
-        Movie::create($validated);
-
+        $this->movieService->storeMovie($request->validated(), $request);
         return redirect('/')->with('success', 'Data berhasil disimpan');
     }
 
     public function data()
     {
-        $movies = Movie::latest()->paginate(10);
-        return view('data-movies', compact('movies'));
+        $movies = $this->movieService->getMoviesForDataTable();
+        return view('movies.data-movies', compact('movies'));
     }
 
-    public function form_edit($id)
+    public function formEdit(string $id)
     {
-        $movie = Movie::find($id);
+        $movie = $this->movieService->findMovie($id);
         $categories = Category::all();
-        return view('form-edit', compact('movie', 'categories'));
+        return view('movies.form-edit', compact('movie', 'categories'));
     }
 
-    // ✅ SETELAH: Ganti Request dengan UpdateMovieRequest
-    public function update(UpdateMovieRequest $request, $id)
+    public function update(UpdateMovieRequest $request, string $id)
     {
-        $movie = Movie::findOrFail($id);
-        $validated = $request->validated();
-
-        if ($request->hasFile('foto_sampul')) {
-            $file = $request->file('foto_sampul');
-            $fileName = Str::uuid()->toString() . '.' . $file->getClientOriginalExtension();
-            $file->move(public_path('images'), $fileName);
-
-            if (File::exists(public_path('images/' . $movie->foto_sampul))) {
-                File::delete(public_path('images/' . $movie->foto_sampul));
-            }
-
-            $validated['foto_sampul'] = $fileName;
-        }
-
-        $movie->update($validated);
-
+        $this->movieService->updateMovie($id, $request->validated(), $request);
         return redirect('/movies/data')->with('success', 'Data berhasil diperbarui');
     }
 
-    public function delete($id)
+    public function delete(string $id)
     {
-        $movie = Movie::findOrFail($id);
-
-        if (File::exists(public_path('images/' . $movie->foto_sampul))) {
-            File::delete(public_path('images/' . $movie->foto_sampul));
-        }
-
-        $movie->delete();
-
+        $this->movieService->deleteMovie($id);
         return redirect('/movies/data')->with('success', 'Data berhasil dihapus');
     }
 }
